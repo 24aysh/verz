@@ -5,14 +5,14 @@
 
 int cmd_init() {
   try {
-    std::filesystem::create_directory(".git");
-    std::filesystem::create_directory(".git/objects");
-    std::filesystem::create_directory(".git/refs");
+    std::filesystem::create_directory(".verz");
+    std::filesystem::create_directory(".verz/objects");
+    std::filesystem::create_directory(".verz/refs");
 
-    std::ofstream headFile(".git/HEAD");
+    std::ofstream headFile(".verz/HEAD");
     headFile << "ref: refs/heads/main\n";
 
-    std::cout << "Initialized git directory\n";
+    std::cout << "Initialized verz directory\n";
     return 0;
 
   } catch (const std::exception &e) {

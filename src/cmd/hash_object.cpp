@@ -43,7 +43,7 @@ void writeGitObject(std::string content, std::string hash) {
 
   deflateEnd(&stream);
 
-  std::string dir = ".git/objects/" + hash.substr(0, 2);
+  std::string dir = ".verz/objects/" + hash.substr(0, 2);
   std::filesystem::create_directories(dir);
 
   std::ofstream out(dir + "/" + hash.substr(2));

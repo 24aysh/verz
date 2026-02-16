@@ -63,7 +63,7 @@ int cmd_cat_file(int argc, char *argv[]) {
 
   std::string hash = argv[3];
   std::string filename =
-      ".git/objects/" + hash.substr(0, 2) + "/" + hash.substr(2);
+      ".verz/objects/" + hash.substr(0, 2) + "/" + hash.substr(2);
 
   std::string content = getGitBlob(filename);
 

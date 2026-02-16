@@ -60,10 +60,10 @@ The compiled binary will be located at `bin/verz`.
 ./bin/verz init
 ```
 
-Creates a `.git` directory with the basic repository structure:
-- `.git/objects/` - Object database
-- `.git/refs/` - References
-- `.git/HEAD` - Current branch reference
+Creates a `.verz` directory with the basic repository structure:
+- `.verz/objects/` - Object database
+- `.verz/refs/` - References
+- `.verz/HEAD` - Current branch reference
 
 ## Project Structure
 
