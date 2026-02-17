@@ -9,5 +9,4 @@ struct treeObject {
 };
 
 int cmd_ls_tree(int argc, char *argv[]);
-std::string binaryToHex(std::string &binary);
 void ls_tree(std::string hash, std::string flag, std::string prefix = "");

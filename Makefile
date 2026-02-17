@@ -6,6 +6,7 @@ LDFLAGS := -lz -lssl -lcrypto
 # Directories
 SRC_DIR := src
 CMD_DIR := $(SRC_DIR)/cmd
+UTILS_DIR := $(SRC_DIR)/utils
 INCLUDE_DIR := include
 BIN_DIR := bin
 OBJ_DIR := $(BIN_DIR)/obj
@@ -16,12 +17,14 @@ TARGET := $(BIN_DIR)/verz
 # Source files
 MAIN_SRC := $(SRC_DIR)/main.cpp
 CMD_SRCS := $(wildcard $(CMD_DIR)/*.cpp)
-SRCS := $(MAIN_SRC) $(CMD_SRCS)
+UTILS_SRCS := $(wildcard $(UTILS_DIR)/*.cpp)
+SRCS := $(MAIN_SRC) $(CMD_SRCS) $(UTILS_SRCS)
 
 # Object files
 MAIN_OBJ := $(OBJ_DIR)/main.o
 CMD_OBJS := $(patsubst $(CMD_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(CMD_SRCS))
-OBJS := $(MAIN_OBJ) $(CMD_OBJS)
+UTILS_OBJS := $(patsubst $(UTILS_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(UTILS_SRCS))
+OBJS := $(MAIN_OBJ) $(CMD_OBJS) $(UTILS_OBJS)
 
 # Header files (for dependency tracking)
 HEADERS := $(wildcard $(INCLUDE_DIR)/*.h) $(wildcard $(INCLUDE_DIR)/cmd/*.h)
@@ -43,6 +46,11 @@ $(OBJ_DIR)/main.o: $(MAIN_SRC) $(HEADERS) | $(OBJ_DIR)
 
 # Compile command source files
 $(OBJ_DIR)/%.o: $(CMD_DIR)/%.cpp $(HEADERS) | $(OBJ_DIR)
+	@echo "Compiling $<..."
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Compile utils source files
+$(OBJ_DIR)/%.o: $(UTILS_DIR)/%.cpp $(HEADERS) | $(OBJ_DIR)
 	@echo "Compiling $<..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
