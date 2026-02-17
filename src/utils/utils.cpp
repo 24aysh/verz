@@ -104,7 +104,7 @@ std::string readGitObject(const std::string &hash) {
 }
 
 std::string calcSHA1(const std::string &content) {
-  unsigned char hash[20]; // SHA_DIGEST_LENGTH = 20
+  unsigned char hash[20];
   SHA1(reinterpret_cast<const unsigned char *>(content.c_str()), content.size(),
        hash);
 

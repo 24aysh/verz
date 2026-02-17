@@ -15,7 +15,6 @@ std::string calcSHA1(const std::string &content);
 // Git object path utilities
 std::string getObjectPath(const std::string &hash);
 bool objectExists(const std::string &hash);
-
 std::string readGitObject(const std::string &hash);
 void writeGitObject(const std::string &content, const std::string &hash);
 std::string createGitObject(const std::string &type, const std::string &content,

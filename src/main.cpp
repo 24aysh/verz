@@ -2,6 +2,7 @@
 #include "../include/hash_object.h"
 #include "../include/init.h"
 #include "../include/ls_tree.h"
+#include "../include/write_tree.h"
 #include <iostream>
 
 int main(int argc, char *argv[]) {
@@ -27,6 +28,10 @@ int main(int argc, char *argv[]) {
 
   if (command == "ls-tree") {
     return cmd_ls_tree(argc, argv);
+  }
+
+  if (command == "write-tree") {
+    return cmd_write_tree();
   }
 
   std::cerr << "Unknown command\n";
