@@ -4,9 +4,10 @@ A lightweight Git implementation in C++ that provides core version control funct
 
 ## Features
 
-- **init** - Initialize a new Git repository
+- **init** - Initialize a new repository
 - **hash-object** - Compute object ID and optionally create a blob from a file
 - **cat-file** - Display contents of repository objects
+- **ls-tree** - List the contents of a tree object
 
 ## Requirements
 
