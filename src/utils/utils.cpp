@@ -1,7 +1,9 @@
 #include "../../include/utils.h"
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <openssl/sha.h>
 #include <sstream>
 #include <vector>
 #include <zlib.h>
@@ -99,4 +101,60 @@ std::string readGitObject(const std::string &hash) {
 
   std::string compressedStr(compressed.begin(), compressed.end());
   return zlibDecompress(compressedStr);
+}
+
+std::string calcSHA1(const std::string &content) {
+  unsigned char hash[20]; // SHA_DIGEST_LENGTH = 20
+  SHA1(reinterpret_cast<const unsigned char *>(content.c_str()), content.size(),
+       hash);
+
+  std::stringstream ss;
+  for (int i = 0; i < 20; i++) {
+    ss << std::hex << std::setw(2) << std::setfill('0')
+       << static_cast<int>(hash[i]);
+  }
+  return ss.str();
+}
+
+std::string getObjectPath(const std::string &hash) {
+  return ".verz/objects/" + hash.substr(0, 2) + "/" + hash.substr(2);
+}
+
+bool objectExists(const std::string &hash) {
+  return std::filesystem::exists(getObjectPath(hash));
+}
+
+void writeGitObject(const std::string &content, const std::string &hash) {
+  std::string compressed = zlibCompress(content);
+
+  std::string dir = ".verz/objects/" + hash.substr(0, 2);
+  std::filesystem::create_directories(dir);
+
+  std::ofstream out(dir + "/" + hash.substr(2), std::ios::binary);
+  out.write(compressed.data(), compressed.size());
+  out.close();
+}
+
+std::string createGitObject(const std::string &type, const std::string &content,
+                            bool write) {
+  std::string header = type + " " + std::to_string(content.size());
+  header += '\0';
+
+  std::string object = header + content;
+
+  std::string hash = calcSHA1(object);
+
+  if (write) {
+    writeGitObject(object, hash);
+  }
+
+  return hash;
+}
+
+std::string createBlobObject(const std::string &content, bool write) {
+  return createGitObject("blob", content, write);
+}
+
+std::string createTreeObject(const std::string &entries, bool write) {
+  return createGitObject("tree", entries, write);
 }
