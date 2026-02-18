@@ -5,9 +5,12 @@ A lightweight Git implementation in C++ that provides core version control funct
 ## Features
 
 - **init** - Initialize a new repository
+- **register** - Register user credentials (username and email)
 - **hash-object** - Compute object ID and optionally create a blob from a file
 - **cat-file** - Display contents of repository objects
 - **ls-tree** - List the contents of a tree object
+- **write-tree** - Create a tree object from the current index
+- **commit-tree** - Create a new commit object
 
 ## Requirements
 
@@ -73,15 +76,24 @@ verz/
 ├── bin/                    # Build output directory
 │   └── obj/               # Object files
 ├── include/               # Header files
-│   ├── init.h
 │   ├── cat_file.h
-│   └── hash_object.h
+│   ├── commit_tree.h
+│   ├── hash_object.h
+│   ├── init.h
+│   ├── ls_tree.h
+│   ├── register.h
+│   ├── utils.h
+│   └── write_tree.h
 ├── src/                   # Source files
 │   ├── main.cpp
 │   └── cmd/              # Command implementations
-│       ├── init.cpp
 │       ├── cat_file.cpp
-│       └── hash_object.cpp
+│       ├── commit_tree.cpp
+│       ├── hash_object.cpp
+│       ├── init.cpp
+│       ├── ls_tree.cpp
+│       ├── register.cpp
+│       └── write_tree.cpp
 ├── Makefile              # Build configuration
 └── README.md
 ```
