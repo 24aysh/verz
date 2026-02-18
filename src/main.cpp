@@ -2,6 +2,7 @@
 #include "../include/hash_object.h"
 #include "../include/init.h"
 #include "../include/ls_tree.h"
+#include "../include/register.h"
 #include "../include/write_tree.h"
 #include <iostream>
 
@@ -16,6 +17,11 @@ int main(int argc, char *argv[]) {
 
   if (command == "init") {
     return cmd_init();
+  }
+
+  // verz register <username> <email>
+  if (command == "register") {
+    return cmd_register(argc, argv);
   }
 
   if (command == "cat-file") {
