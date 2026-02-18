@@ -1,4 +1,5 @@
 #include "../include/cat_file.h"
+#include "../include/commit_tree.h"
 #include "../include/hash_object.h"
 #include "../include/init.h"
 #include "../include/ls_tree.h"
@@ -38,6 +39,11 @@ int main(int argc, char *argv[]) {
 
   if (command == "write-tree") {
     return cmd_write_tree();
+  }
+
+  // verz commit-tree <tree-hash> -p <parent-hash> <message>
+  if (command == "commit-tree") {
+    return cmd_commit_tree(argc, argv);
   }
 
   std::cerr << "Unknown command\n";
