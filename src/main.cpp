@@ -1,4 +1,5 @@
 #include "../include/cat_file.h"
+#include "../include/clone.h"
 #include "../include/commit_tree.h"
 #include "../include/hash_object.h"
 #include "../include/init.h"
@@ -44,6 +45,10 @@ int main(int argc, char *argv[]) {
   // verz commit-tree <tree-hash> -p <parent-hash> <message>
   if (command == "commit-tree") {
     return cmd_commit_tree(argc, argv);
+  }
+
+  if (command == "clone") {
+    return cmd_clone(argc, argv);
   }
 
   std::cerr << "Unknown command\n";
