@@ -194,13 +194,12 @@ void parsePackFile(UploadPackParser &p, const std::string &commitSha,
 
     uint8_t firstByte = p.packfile[offset++];
     type = (firstByte >> 4) & 0x07;
-
-    offset++;
+    uncompressedSize = firstByte & 0x0F; // low 4 bits are size[3:0]
+    int shift = 4;
     while (firstByte & 0x80) {
-      firstByte = p.packfile[offset];
-      uncompressedSize <<= 7;
-      uncompressedSize |= (firstByte & 0x7F);
-      offset++;
+      firstByte = p.packfile[offset++];
+      uncompressedSize |= (uint32_t)(firstByte & 0x7F) << shift;
+      shift += 7;
     }
     if (type <= 4) {
       decompressed = decompress_continuous(p.packfile, consumedBytes, offset,
@@ -233,12 +232,30 @@ void parsePackFile(UploadPackParser &p, const std::string &commitSha,
       std::vector<unsigned char> compressedData = compress_data(fullContent);
       std::array<unsigned char, 20> hash;
       SHA1(fullContent.data(), fullContent.size(), hash.data());
-      std::string shaHex =
-          binaryToHex(reinterpret_cast<const char *>(hash.data()));
+      std::string shaHex = binaryToHex(
+          std::string(reinterpret_cast<const char *>(hash.data()), 20));
       hashCache[shaHex] = objOffset;
+      // Write the object using raw decompressed content with proper type name
+      std::string typeName;
+      switch (type) {
+      case 1:
+        typeName = "commit";
+        break;
+      case 2:
+        typeName = "tree";
+        break;
+      case 3:
+        typeName = "blob";
+        break;
+      case 4:
+        typeName = "tag";
+        break;
+      }
       std::string objectHash = createGitObject(
-          std::to_string(type),
-          reinterpret_cast<const char *>(compressedData.data()), true);
+          typeName,
+          std::string(reinterpret_cast<const char *>(decompressed.data()),
+                      decompressed.size()),
+          true);
       offset += consumedBytes;
     } else {
       if (type == 6) {
@@ -285,14 +302,30 @@ void parsePackFile(UploadPackParser &p, const std::string &commitSha,
         fullContent.insert(fullContent.end(), targetObject.begin(),
                            targetObject.end());
 
-        auto compressedData = compress_data(fullContent);
         std::array<unsigned char, 20> hash;
         SHA1(fullContent.data(), fullContent.size(), hash.data());
-        std::string shaHex =
-            binaryToHex(reinterpret_cast<const char *>(hash.data()));
+        std::string shaHex = binaryToHex(
+            std::string(reinterpret_cast<const char *>(hash.data()), 20));
+        std::string baseTypeName;
+        switch (typeCache[baseOffset]) {
+        case 1:
+          baseTypeName = "commit";
+          break;
+        case 2:
+          baseTypeName = "tree";
+          break;
+        case 3:
+          baseTypeName = "blob";
+          break;
+        case 4:
+          baseTypeName = "tag";
+          break;
+        }
         std::string objectHash = createGitObject(
-            std::to_string(typeCache[baseOffset]),
-            reinterpret_cast<const char *>(compressedData.data()), true);
+            baseTypeName,
+            std::string(reinterpret_cast<const char *>(targetObject.data()),
+                        targetObject.size()),
+            true);
         hashCache[shaHex] = objOffset;
         offset += consumedBytes;
       } else if (type == 7) {
@@ -301,8 +334,8 @@ void parsePackFile(UploadPackParser &p, const std::string &commitSha,
         memcpy(sha.data(), p.packfile.data() + offset, 20);
         offset += 20;
 
-        std::string shaHex =
-            binaryToHex(reinterpret_cast<const char *>(sha.data()));
+        std::string shaHex = binaryToHex(
+            std::string(reinterpret_cast<const char *>(sha.data()), 20));
         size_t baseOffset = hashCache[shaHex];
         typeCache[objOffset] = typeCache[baseOffset];
 
@@ -335,14 +368,30 @@ void parsePackFile(UploadPackParser &p, const std::string &commitSha,
         fullContent.insert(fullContent.end(), targetObject.begin(),
                            targetObject.end());
 
-        auto compressedData = compress_data(fullContent);
         std::array<unsigned char, 20> hash;
         SHA1(fullContent.data(), fullContent.size(), hash.data());
-        std::string shaHexTarget =
-            binaryToHex(reinterpret_cast<const char *>(hash.data()));
+        std::string shaHexTarget = binaryToHex(
+            std::string(reinterpret_cast<const char *>(hash.data()), 20));
+        std::string refBaseTypeName;
+        switch (typeCache[baseOffset]) {
+        case 1:
+          refBaseTypeName = "commit";
+          break;
+        case 2:
+          refBaseTypeName = "tree";
+          break;
+        case 3:
+          refBaseTypeName = "blob";
+          break;
+        case 4:
+          refBaseTypeName = "tag";
+          break;
+        }
         std::string objectHash = createGitObject(
-            std::to_string(typeCache[baseOffset]),
-            reinterpret_cast<const char *>(compressedData.data()), true);
+            refBaseTypeName,
+            std::string(reinterpret_cast<const char *>(targetObject.data()),
+                        targetObject.size()),
+            true);
         hashCache[shaHexTarget] = objOffset;
         offset += consumedBytes;
       }
@@ -377,8 +426,8 @@ void parseTree(
          ++it) {
       sha[it - (treeData.begin() + pos)] = *it;
     }
-    std::string shaHex =
-        binaryToHex(reinterpret_cast<const char *>(sha.data()));
+    std::string shaHex = binaryToHex(
+        std::string(reinterpret_cast<const char *>(sha.data()), 20));
     pos += 20;
     if (mode == "40000") {
       std::filesystem::create_directory(pathPrefix + name);
@@ -561,8 +610,7 @@ void parseRecToPktLine(UploadPackParser &p) {
     int len = std::strtol(lenbuf, nullptr, 16);
     if (len == 0) {
       offset += 4;
-      p.phase = Phase::DONE;
-      continue;
+      continue; // flush packet — just skip, don't change phase
     }
 
     if (p.buf.size() - offset < (size_t)len)
@@ -636,9 +684,7 @@ void clone(std::string &url, std::string root) {
   oid.erase(--oid.end());
 
   std::string request =
-      makePktLine("want " + oid + " side-band-64k ofs-delta thin-pack\n");
-  request += makePktLine("done\n");
-
+      makePktLine("want " + oid + " side-band-64k ofs-delta\n");
   request += "0000";
   request += makePktLine("done\n");
 

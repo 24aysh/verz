@@ -34,7 +34,7 @@ std::string write_tree(std::filesystem::path path) {
       std::ifstream file(entry.path(), std::ios::binary);
       std::string content((std::istreambuf_iterator<char>(file)),
                           std::istreambuf_iterator<char>());
-      tree_entry.sha_hex = createBlobObject(content);
+      tree_entry.sha_hex = createBlobObject(content, /*write=*/true);
     }
 
     entries.push_back(tree_entry);
@@ -44,5 +44,5 @@ std::string write_tree(std::filesystem::path path) {
   for (const auto &e : entries) {
     tree_content += e.mode + " " + e.name + '\0' + hexToBinary(e.sha_hex);
   }
-  return createTreeObject(tree_content);
+  return createTreeObject(tree_content, /*write=*/true);
 }
