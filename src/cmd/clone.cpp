@@ -1,6 +1,17 @@
 #include "../../include/clone.h"
 #include "../../include/utils.h"
 
+int cmd_clone(int argc, char *argv[]) {
+  if (argc < 4) {
+    std::cerr << "Usage: clone <repo_link> <directory>\n";
+    return EXIT_FAILURE;
+  }
+  std::string repoLink = argv[2];
+  std::string rootName = argv[3];
+  clone(repoLink, rootName);
+  return EXIT_SUCCESS;
+}
+
 PktLine readPktLine(std::vector<uint8_t> &responseBuffer, size_t &offset) {
   if (offset + 4 > responseBuffer.size()) {
     throw std::runtime_error("Unexpected EOF");
@@ -29,7 +40,7 @@ resolveDelta(const std::vector<unsigned char> &base,
   uint64_t sourceSize = 0, targetSize = 0;
 
   uint8_t b = delta[deltaOffset++];
-  sourceSize = b & 0x7F;
+  sourceSize = b & 0x7F; // size of the base object that delta expects
   int shift = 7;
   while (b & 0x80) {
     b = delta[deltaOffset++];
@@ -38,7 +49,7 @@ resolveDelta(const std::vector<unsigned char> &base,
   }
 
   b = delta[deltaOffset++];
-  targetSize = b & 0x7F;
+  targetSize = b & 0x7F; // target size of object after resolving delta
   shift = 7;
   while (b & 0x80) {
     b = delta[deltaOffset++];
@@ -85,6 +96,80 @@ resolveDelta(const std::vector<unsigned char> &base,
   }
 
   return result;
+}
+
+std::vector<unsigned char>
+compress_data(std::vector<unsigned char> &fullContent) {
+  z_stream blobStream{};
+  if (deflateInit(&blobStream, Z_DEFAULT_COMPRESSION) != Z_OK) {
+    std::cerr << "deflateInit failed\n";
+    return {};
+  }
+  blobStream.avail_in = fullContent.size();
+  blobStream.next_in = fullContent.data();
+
+  std::vector<unsigned char> compressedData;
+  unsigned char outbuf[CHUNK];
+  int ret;
+  do {
+    blobStream.next_out = outbuf;
+    blobStream.avail_out = CHUNK;
+
+    ret = deflate(&blobStream, Z_FINISH);
+
+    compressedData.insert(compressedData.end(), outbuf,
+                          outbuf + (CHUNK - blobStream.avail_out));
+  } while (ret == Z_OK);
+
+  deflateEnd(&blobStream);
+
+  return compressedData;
+}
+
+std::vector<unsigned char>
+decompress_continuous(std::vector<uint8_t> &packfile, uint32_t &consumedBytes,
+                      size_t start, uint32_t &expectedUncompressedSize) {
+  std::vector<unsigned char> out;
+  z_stream blobStream{};
+
+  blobStream.zalloc = Z_NULL;
+  blobStream.zfree = Z_NULL;
+  blobStream.opaque = Z_NULL;
+  blobStream.avail_in = packfile.size() - start;
+  blobStream.next_in = packfile.data() + start;
+
+  if (inflateInit(&blobStream) != Z_OK) {
+    std::cerr << "inflateInit failed\n";
+    return {};
+  }
+
+  int ret;
+  unsigned char outbuf[CHUNK];
+  do {
+    blobStream.avail_out = CHUNK;
+    blobStream.next_out = outbuf;
+
+    ret = inflate(&blobStream, Z_NO_FLUSH);
+
+    if (ret == Z_STREAM_ERROR || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR) {
+      std::cerr << "inflate failed because of error code: "
+                << (ret == Z_STREAM_ERROR
+                        ? "Stream error"
+                        : (ret == Z_DATA_ERROR ? "Data error" : "Memory error"))
+                << "\n";
+      inflateEnd(&blobStream);
+      return {};
+    }
+
+    size_t produced = CHUNK - blobStream.avail_out;
+    out.insert(out.end(), outbuf, outbuf + produced);
+  } while (ret != Z_STREAM_END);
+
+  consumedBytes = blobStream.total_in;
+
+  inflateEnd(&blobStream);
+
+  return out;
 }
 
 void parsePackFile(UploadPackParser &p, const std::string &commitSha,
@@ -196,7 +281,116 @@ void parsePackFile(UploadPackParser &p, const std::string &commitSha,
         std::vector<unsigned char> fullContent;
 
         fullContent.insert(fullContent.end(), header.begin(), header.end());
+        objectCache[objOffset] = targetObject;
+        fullContent.insert(fullContent.end(), targetObject.begin(),
+                           targetObject.end());
+
+        auto compressedData = compress_data(fullContent);
+        std::array<unsigned char, 20> hash;
+        SHA1(fullContent.data(), fullContent.size(), hash.data());
+        std::string shaHex =
+            binaryToHex(reinterpret_cast<const char *>(hash.data()));
+        std::string objectHash = createGitObject(
+            std::to_string(typeCache[baseOffset]),
+            reinterpret_cast<const char *>(compressedData.data()), true);
+        hashCache[shaHex] = objOffset;
+        offset += consumedBytes;
+      } else if (type == 7) {
+        // ref-delta
+        std::array<unsigned char, 20> sha;
+        memcpy(sha.data(), p.packfile.data() + offset, 20);
+        offset += 20;
+
+        std::string shaHex =
+            binaryToHex(reinterpret_cast<const char *>(sha.data()));
+        size_t baseOffset = hashCache[shaHex];
+        typeCache[objOffset] = typeCache[baseOffset];
+
+        decompressed = decompress_continuous(p.packfile, consumedBytes, offset,
+                                             uncompressedSize);
+        std::string header;
+        std::vector<unsigned char> targetObject =
+            resolveDelta(objectCache[baseOffset], decompressed);
+
+        switch (typeCache[baseOffset]) {
+        case 1:
+          header = "commit " + std::to_string(targetObject.size()) + '\0';
+          break;
+        case 2:
+          header = "tree " + std::to_string(targetObject.size()) + '\0';
+          break;
+        case 3:
+          header = "blob " + std::to_string(targetObject.size()) + '\0';
+          break;
+        case 4:
+          header = "tag " + std::to_string(targetObject.size()) + '\0';
+          break;
+        default:
+          throw std::runtime_error("Unknown object type");
+        }
+        std::vector<unsigned char> fullContent;
+        fullContent.insert(fullContent.end(), header.begin(), header.end());
+
+        objectCache[objOffset] = targetObject;
+        fullContent.insert(fullContent.end(), targetObject.begin(),
+                           targetObject.end());
+
+        auto compressedData = compress_data(fullContent);
+        std::array<unsigned char, 20> hash;
+        SHA1(fullContent.data(), fullContent.size(), hash.data());
+        std::string shaHexTarget =
+            binaryToHex(reinterpret_cast<const char *>(hash.data()));
+        std::string objectHash = createGitObject(
+            std::to_string(typeCache[baseOffset]),
+            reinterpret_cast<const char *>(compressedData.data()), true);
+        hashCache[shaHexTarget] = objOffset;
+        offset += consumedBytes;
       }
+    }
+  }
+  std::vector<unsigned char> commitData = objectCache[hashCache[commitSha]];
+  size_t spacePos =
+      std::find(commitData.begin(), commitData.end(), ' ') - commitData.begin();
+  std::string shaHex = std::string(commitData.begin() + spacePos + 1,
+                                   commitData.begin() + spacePos + 41);
+  parseTree(shaHex, root + "/", hashCache, objectCache);
+}
+
+void parseTree(
+    std::string &treeSha, std::string pathPrefix,
+    std::unordered_map<std::string, size_t> &hashCache,
+    std::unordered_map<size_t, std::vector<unsigned char>> &objectCache) {
+  size_t offset = hashCache[treeSha];
+  std::vector<unsigned char> treeData = objectCache[offset];
+
+  size_t pos = 0;
+  while (pos < treeData.size()) {
+    size_t spacePos = std::find(treeData.begin() + pos, treeData.end(), ' ') -
+                      treeData.begin();
+    std::string mode(treeData.begin() + pos, treeData.begin() + spacePos);
+    pos = spacePos + 1;
+    std::string name(treeData.begin() + pos,
+                     std::find(treeData.begin() + pos, treeData.end(), '\0'));
+    pos += name.size() + 1;
+    std::array<unsigned char, 20> sha;
+    for (auto it = treeData.begin() + pos; it != treeData.begin() + pos + 20;
+         ++it) {
+      sha[it - (treeData.begin() + pos)] = *it;
+    }
+    std::string shaHex =
+        binaryToHex(reinterpret_cast<const char *>(sha.data()));
+    pos += 20;
+    if (mode == "40000") {
+      std::filesystem::create_directory(pathPrefix + name);
+
+      parseTree(shaHex, pathPrefix + name + "/", hashCache, objectCache);
+    } else {
+      std::vector<unsigned char> blobData = objectCache[hashCache[shaHex]];
+
+      std::ofstream outFile(pathPrefix + name, std::ios::binary);
+      outFile.write(reinterpret_cast<const char *>(blobData.data()),
+                    blobData.size());
+      outFile.close();
     }
   }
 }
