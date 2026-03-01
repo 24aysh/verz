@@ -6,6 +6,7 @@
 #include "../include/commit_tree.h"
 #include "../include/hash_object.h"
 #include "../include/init.h"
+#include "../include/log.h"
 #include "../include/ls_tree.h"
 #include "../include/register.h"
 #include "../include/write_tree.h"
@@ -68,6 +69,10 @@ int main(int argc, char *argv[]) {
 
   if (command == "delete-branch") {
     return cmd_delete_branch(argc, argv);
+  }
+
+  if (command == "log") {
+    return cmd_log(argc, argv);
   }
 
   if (command == "clone") {
