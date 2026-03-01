@@ -678,8 +678,8 @@ void clone(std::string &url, std::string root) {
   std::vector<uint8_t> responseBuffer = discoverRefs(curl, url);
   std::cout << "Discovered refs:\n";
   std::unordered_map<std::string, std::string> refs = readRefs(responseBuffer);
-  std::cout << "Refs read\n";
   std::string head = resolveHead(refs);
+  std::cout << "Resolving head\n";
   std::string oid = refs[head];
   oid.erase(--oid.end());
 
@@ -688,14 +688,12 @@ void clone(std::string &url, std::string root) {
   request += "0000";
   request += makePktLine("done\n");
 
-  std::cout << "Package negotiation done, sending request ...\n";
-
   UploadPackParser packfile = makeRequest(curl, request, url);
 
-  std::cout << "Packfile received, parsing...\n";
   std::string commitSha = initialiseGitRepo(root, refs);
   parsePackFile(packfile, commitSha, root);
 
   curl_easy_cleanup(curl);
   curl_global_cleanup();
+  std::cout << "Cloned repo in " << root << "\n";
 }
